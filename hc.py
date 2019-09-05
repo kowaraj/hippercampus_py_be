@@ -44,15 +44,45 @@ class PostObject(SQLAlchemyObjectType):
     class Meta:
         model = Post
         interfaces = (graphene.relay.Node, )
+
 class UserObject(SQLAlchemyObjectType):
    class Meta:
        model = User
        interfaces = (graphene.relay.Node, )
+       
 class Query(graphene.ObjectType):
     node = graphene.relay.Node.Field()
     all_posts = SQLAlchemyConnectionField(PostObject)
     all_users = SQLAlchemyConnectionField(UserObject)
-schema = graphene.Schema(query=Query)
+
+class CreatePost(graphene.Mutation):
+    class Arguments:
+        title = graphene.String(required=True)
+        body = graphene.String(required=True) 
+        username = graphene.String(required=True)
+    post = graphene.Field(lambda: PostObject)
+    def mutate(self, info, title, body, username):
+        user = User.query.filter_by(username=username).first()
+        post = Post(title=title, body=body)
+        if user is not None:
+            post.author = user
+        db.session.add(post)
+        db.session.commit()
+        return CreatePost(post=post)
+
+class Mutation(graphene.ObjectType):
+    create_post = CreatePost.Field()
+
+schema = graphene.Schema(query=Query, mutation=Mutation)
+# schema = graphene.Schema(query=Query)
+
+from flask_cors import CORS
+
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+
+
 
 app.add_url_rule('/graphql', view_func=GraphQLView.as_view('graphql', schema=schema, graphiql=True))
 
@@ -83,6 +113,8 @@ def upload():
     else:
         return "upload GET"
 
+    # from flask import redirect 
+    # return redirect(request.referrer) 
 
 if __name__ == '__main__':
      app.run()
